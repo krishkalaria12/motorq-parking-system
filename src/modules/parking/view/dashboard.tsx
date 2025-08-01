@@ -1,18 +1,46 @@
 // app/page.tsx
 "use client";
 
-import { ParkingSquare, CheckCircle, XCircle, Wrench, AlertTriangle } from 'lucide-react';
+import { useState, useMemo } from 'react';
 import { useDashboardQuery } from '@/actions/parking-actions';
 import { StatCard, ActiveSessionsTable } from '@/modules/parking/components/dashboard-comp';
 import { CheckInDialog } from '@/modules/parking/components/check-in-dialog';
+import { DashboardFilters } from '@/modules/parking/components/dashboard-filter';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ParkingSquare, CheckCircle, XCircle, Wrench, AlertTriangle } from 'lucide-react';
+import { VehicleType } from '@/types/enums';
 
 export function DashboardPage() {
+  const [filters, setFilters] = useState<{ vehicleType?: VehicleType | 'ALL'; numberPlate?: string }>({
+    vehicleType: 'ALL',
+    numberPlate: '',
+  });
+
+  // 1. Fetch the complete, unfiltered data from the API
   const { data, isLoading, isError, error } = useDashboardQuery();
 
+  const handleFilterChange = (newFilter: Partial<typeof filters>) => {
+    setFilters(prev => ({ ...prev, ...newFilter }));
+  };
+
   const stats = data?.slotCounts || { total: 0, available: 0, occupied: 0, maintenance: 0 };
-  const sessions = data?.activeSessions || [];
+  
+  // 2. Perform filtering on the client side using useMemo for performance
+  const filteredSessions = useMemo(() => {
+    // Return an empty array if there are no sessions to filter
+    if (!data?.activeSessions) return [];
+
+    // Apply filters to the session data
+    return data.activeSessions.filter(session => {
+      const typeMatch = filters.vehicleType === 'ALL' || session.vehicleId.vehicleType === filters.vehicleType;
+      
+      const plateMatch = !filters.numberPlate || 
+                         session.numberPlate.includes(filters.numberPlate.toUpperCase());
+                         
+      return typeMatch && plateMatch;
+    });
+  }, [data?.activeSessions, filters]); // Re-run this logic only when the source data or filters change
 
   return (
     <div className="min-h-screen bg-gray-50/50">
@@ -26,8 +54,8 @@ export function DashboardPage() {
         </header>
 
         {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-          {isLoading ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+          {isLoading && !data ? (
             Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[125px] w-full" />)
           ) : (
             <>
@@ -39,6 +67,11 @@ export function DashboardPage() {
           )}
         </div>
 
+        {/* Filter and Search Section */}
+        <div className="mb-8">
+          <DashboardFilters onFilterChange={handleFilterChange} />
+        </div>
+
         {isError && (
           <Alert variant="destructive" className="mb-8">
             <AlertTriangle className="h-4 w-4" />
@@ -47,11 +80,11 @@ export function DashboardPage() {
           </Alert>
         )}
 
-        {/* Active Sessions Table */}
+        {/* 3. Render the ActiveSessionsTable with the filtered data */}
         {isLoading ? (
           <Skeleton className="h-[400px] w-full" />
         ) : (
-          <ActiveSessionsTable sessions={sessions} />
+          <ActiveSessionsTable sessions={filteredSessions} />
         )}
       </main>
     </div>
