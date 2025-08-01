@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useCheckOutMutation } from '@/actions/parking-actions';
 import { format } from 'date-fns';
+import { LiveDuration } from './live-duration'; // Import the new component
+import { VehicleType } from '@/types/enums';
 
 // --- Stat Card Component ---
 interface StatCardProps {
@@ -37,7 +39,7 @@ interface ActiveSession {
   numberPlate: string;
   entryTime: string;
   vehicleId: {
-    vehicleType: string;
+    vehicleType: VehicleType;
   };
   slotId: {
     slotNumber: string;
@@ -49,10 +51,10 @@ interface ActiveSessionsTableProps {
 }
 
 const vehicleIcons: { [key: string]: React.ElementType } = {
-  Car: Car,
-  Bike: Bike,
-  EV: Zap,
-  Handicap: ParkingSquare,
+  [VehicleType.CAR]: Car,
+  [VehicleType.BIKE]: Bike,
+  [VehicleType.EV]: Zap,
+  [VehicleType.HANDICAP_ACCESSIBLE]: ParkingSquare,
 };
 
 export function ActiveSessionsTable({ sessions }: ActiveSessionsTableProps) {
@@ -80,13 +82,15 @@ export function ActiveSessionsTable({ sessions }: ActiveSessionsTableProps) {
               <TableHead>Number Plate</TableHead>
               <TableHead>Slot</TableHead>
               <TableHead>Entry Time</TableHead>
+              {/* Add new column header */}
+              <TableHead>Duration</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sessions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
+                <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
                   No vehicles currently parked.
                 </TableCell>
               </TableRow>
@@ -113,6 +117,10 @@ export function ActiveSessionsTable({ sessions }: ActiveSessionsTableProps) {
                             <Clock className="h-3 w-3" />
                             {format(new Date(session.entryTime), 'dd MMM, hh:mm a')}
                         </div>
+                    </TableCell>
+                    {/* Add new cell with the LiveDuration component */}
+                    <TableCell>
+                      <LiveDuration startTime={session.entryTime} />
                     </TableCell>
                     <TableCell className="text-right">
                       <Button 
