@@ -9,10 +9,11 @@ import { DashboardFilters } from '@/modules/parking/components/dashboard-filter'
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ParkingSquare, CheckCircle, XCircle, Wrench, AlertTriangle } from 'lucide-react';
+import { CheckCircle, Wrench, AlertTriangle, Car, LayoutGrid } from 'lucide-react';
 import { VehicleType } from '@/types/enums';
 import { SlotsManagement } from '../components/slot-management';
 import { AddSlotsDialog } from '../components/add-slots-dialog';
+import { BillingDashboard } from '@/modules/billing/components/billing-dashboard';
 
 export function DashboardPage() {
   const [filters, setFilters] = useState<{ vehicleType?: VehicleType | 'ALL'; numberPlate?: string }>({
@@ -20,7 +21,6 @@ export function DashboardPage() {
     numberPlate: '',
   });
 
-  // 1. Fetch the complete, unfiltered data from the API
   const { data, isLoading, isError, error } = useDashboardQuery();
 
   const handleFilterChange = (newFilter: Partial<typeof filters>) => {
@@ -29,21 +29,14 @@ export function DashboardPage() {
 
   const stats = data?.slotCounts || { total: 0, available: 0, occupied: 0, maintenance: 0 };
   
-  // 2. Perform filtering on the client side using useMemo for performance
   const filteredSessions = useMemo(() => {
-    // Return an empty array if there are no sessions to filter
     if (!data?.activeSessions) return [];
-
-    // Apply filters to the session data
     return data.activeSessions.filter(session => {
       const typeMatch = filters.vehicleType === 'ALL' || session.vehicleId.vehicleType === filters.vehicleType;
-      
-      const plateMatch = !filters.numberPlate || 
-                         session.numberPlate.includes(filters.numberPlate.toUpperCase());
-                         
+      const plateMatch = !filters.numberPlate || session.numberPlate.includes(filters.numberPlate.toUpperCase());
       return typeMatch && plateMatch;
     });
-  }, [data?.activeSessions, filters]); // Re-run this logic only when the source data or filters change
+  }, [data?.activeSessions, filters]);
 
   return (
     <div className="min-h-screen bg-gray-50/50">
@@ -65,9 +58,9 @@ export function DashboardPage() {
             Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[125px] w-full" />)
           ) : (
             <>
-              <StatCard title="Total Slots" value={stats.total} icon={ParkingSquare} color="text-gray-500" />
+              <StatCard title="Total Slots" value={stats.total} icon={LayoutGrid} color="text-gray-500" />
               <StatCard title="Available" value={stats.available} icon={CheckCircle} color="text-green-500" />
-              <StatCard title="Occupied" value={stats.occupied} icon={XCircle} color="text-red-500" />
+              <StatCard title="Occupied" value={stats.occupied} icon={Car} color="text-red-500" />
               <StatCard title="Maintenance" value={stats.maintenance} icon={Wrench} color="text-amber-500" />
             </>
           )}
@@ -77,15 +70,17 @@ export function DashboardPage() {
           <Alert variant="destructive" className="mb-8">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error.message}</AlertDescription>
+            <AlertDescription>{(error as Error).message}</AlertDescription>
           </Alert>
         )}
 
         {/* Tabbed Interface */}
         <Tabs defaultValue="sessions" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:w-[400px]">
+          {/* 2. Update the TabsList to have 3 columns */}
+          <TabsList className="grid w-full grid-cols-3 md:w-[600px]">
             <TabsTrigger value="sessions">Active Sessions</TabsTrigger>
             <TabsTrigger value="slots">Slot Management</TabsTrigger>
+            <TabsTrigger value="billing">Billing</TabsTrigger>
           </TabsList>
           
           <TabsContent value="sessions" className="mt-4">
@@ -101,6 +96,11 @@ export function DashboardPage() {
 
           <TabsContent value="slots" className="mt-4">
             <SlotsManagement />
+          </TabsContent>
+
+          {/* 3. Add the new TabsContent for the Billing Dashboard */}
+          <TabsContent value="billing" className="mt-4">
+            <BillingDashboard />
           </TabsContent>
         </Tabs>
       </main>
