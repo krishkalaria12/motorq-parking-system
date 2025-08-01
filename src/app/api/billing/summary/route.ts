@@ -33,7 +33,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: false, error: validation.error.flatten().fieldErrors }, { status: 400 });
     }
 
-    let { startDate, endDate, page, limit } = validation.data;
+    let { startDate, endDate } = validation.data;
+    const { page, limit } = validation.data;
     const now = new Date();
     
     switch (validation.data.period) {
