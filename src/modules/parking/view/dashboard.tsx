@@ -8,7 +8,7 @@ import { CheckInDialog } from '@/modules/parking/components/check-in-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-export default function DashboardPage() {
+export function DashboardPage() {
   const { data, isLoading, isError, error } = useDashboardQuery();
 
   const stats = data?.slotCounts || { total: 0, available: 0, occupied: 0, maintenance: 0 };
