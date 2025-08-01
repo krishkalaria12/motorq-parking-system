@@ -68,7 +68,7 @@ export function useAddSlotsMutation() {
 // 2. Update slot status (e.g., mark as maintenance)
 async function updateSlotStatus(payload: UpdateSlotStatusPayload): Promise<ParkingSlotData> {
   const { slotId, ...body } = payload;
-  const response = await axiosInstance.put(`/parking/slots/${slotId}/maintenance`, body);
+  const response = await axiosInstance.put(`/parking/slot/${slotId}/maintenance`, body);
   return response.data.data;
 }
 
