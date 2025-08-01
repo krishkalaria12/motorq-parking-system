@@ -1,4 +1,5 @@
 // app/api/parking/slots/route.ts
+
 import { NextResponse } from 'next/server';
 import dbConnect from '@/db';
 import { ParkingSlot } from '@/models';
@@ -27,13 +28,15 @@ export async function POST(request: Request) {
     // Validate the incoming array of slots
     const validation = createSlotsSchema.safeParse(body);
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: validation.error.flatten().fieldErrors }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: validation.error.flatten().fieldErrors },
+        { status: 400 }
+      );
     }
 
     const slotsToCreate = validation.data;
 
-    // Use insertMany for efficient bulk insertion.
-    // `ordered: false` will attempt to insert all valid documents, even if some have duplicate key errors.
+    // Bulk insert, even if some entries fail
     const result = await ParkingSlot.insertMany(slotsToCreate, { ordered: false });
 
     return NextResponse.json(
@@ -45,16 +48,16 @@ export async function POST(request: Request) {
       { status: 201 }
     );
 
-  } catch (error: any) {
-    // Handle potential duplicate key errors if a slotNumber already exists
-    if (error.code === 11000) {
+  } catch (error: unknown) {
+    // Handle duplicate key errors for slotNumber
+    if (typeof error === 'object' && error !== null && 'code' in error && (error as any).code === 11000) {
       return NextResponse.json(
         {
           success: false,
           error: "One or more slot numbers already exist. Please provide unique slot numbers.",
-          details: error.writeErrors?.map((e: any) => `Slot '${e.err.op.slotNumber}' failed.`),
+          details: (error as any).writeErrors?.map((e: any) => `Slot '${e.err.op.slotNumber}' failed.`),
         },
-        { status: 409 } // 409 Conflict
+        { status: 409 }
       );
     }
 

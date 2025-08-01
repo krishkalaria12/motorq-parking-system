@@ -33,6 +33,13 @@ interface DashboardData {
   activeSessions: ActiveSession[];
 }
 
+interface CheckInSuccessData {
+  session: ActiveSession;
+  slot: string;
+}
+
+
+
 // --- Dashboard Query ---
 
 async function getDashboardData(): Promise<DashboardData> {
@@ -59,7 +66,7 @@ interface CheckInPayload {
   slotId?: string;
 }
 
-async function checkInVehicle(payload: CheckInPayload): Promise<any> {
+async function checkInVehicle(payload: CheckInPayload): Promise<CheckInSuccessData> {
   const res = await axiosInstance.post('/parking/check-in', payload);
   return res.data.data;
 }
@@ -87,7 +94,7 @@ interface CheckOutPayload {
   sessionId: string;
 }
 
-async function checkOutVehicle(payload: CheckOutPayload): Promise<any> {
+async function checkOutVehicle(payload: CheckOutPayload): Promise<ActiveSession> {
   const res = await axiosInstance.put('/parking/check-out', payload);
   return res.data.data;
 }
