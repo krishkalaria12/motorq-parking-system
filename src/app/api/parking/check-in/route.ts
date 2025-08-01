@@ -19,10 +19,6 @@ const checkInSchema = z.object({
   slotId: z.string().optional(),
 });
 
-/**
- * @description Handle vehicle check-in.
- * Assigns a parking slot and creates an active session.
- */
 export async function POST(request: Request) {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -31,7 +27,6 @@ export async function POST(request: Request) {
     await dbConnect();
     const body = await request.json();
     
-    // Validate input
     const validation = checkInSchema.safeParse(body);
     if (!validation.success) {
       await session.abortTransaction();
@@ -103,7 +98,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Prepare session data
     const sessionData: any = {
       numberPlate,
       vehicleId: vehicle._id,
@@ -118,7 +112,6 @@ export async function POST(request: Request) {
       sessionData.dayPassDate = today;
     }
 
-    // Create parking session
     const newSession = new ParkingSession(sessionData);
     await newSession.save({ session });
 
@@ -142,13 +135,11 @@ export async function POST(request: Request) {
   } catch (error) {
     await session.abortTransaction();
     
-    // Handle different types of errors
     let errorMessage = 'An unexpected error occurred';
     let statusCode = 500;
 
     if (error instanceof Error) {
       errorMessage = error.message;
-      // You can add more specific error handling here based on error types
       if (error.message.includes('duplicate key')) {
         statusCode = 409;
         errorMessage = 'This record already exists';
