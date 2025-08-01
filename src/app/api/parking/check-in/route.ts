@@ -1,13 +1,15 @@
 // app/api/parking/check-in/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
-import dbConnect from '@/db';
-import { Vehicle, ParkingSession, ParkingSlot } from '@/models';
-import { BillingType, SessionStatus, SlotStatus, SlotType, VehicleType } from '@/types/enums';
 import { z } from 'zod';
 import mongoose from 'mongoose';
 
-// Zod schema for input validation
+import dbConnect from '@/db';
+import { Vehicle, ParkingSession, ParkingSlot } from '@/models';
+import { IParkingSession } from '@/models/parking-session.models';
+import { BillingType, SessionStatus, SlotStatus, SlotType, VehicleType } from '@/types/enums';
+import { calculateBill } from '@/services/pricing-services';
+
 const checkInSchema = z.object({
   numberPlate: z.string().min(3, "Number plate is required.").max(10).transform(val => val.toUpperCase()),
   vehicleType: z.nativeEnum(VehicleType, { message: "Please select a valid vehicle type." }),
@@ -43,42 +45,25 @@ export async function POST(request: Request) {
       await vehicle.save({ session });
     }
 
-    // --- SIMPLIFIED NEAREST SLOT LOGIC ---
     let assignedSlot;
-    if (slotId) { // Manual override logic remains the same
+    if (slotId) {
       assignedSlot = await ParkingSlot.findById(slotId).session(session);
       if (!assignedSlot || assignedSlot.status !== SlotStatus.AVAILABLE) {
         await session.abortTransaction();
         return NextResponse.json({ success: false, error: "Manually selected slot is not available." }, { status: 409 });
       }
-    } else { // Auto-assignment using find and a custom sort
+    } else {
       const compatibleSlotTypes = getCompatibleSlotTypes(vehicleType);
-      
-      // 1. Find all matching available slots from the database
-      const availableSlots = await ParkingSlot.find({
-        status: SlotStatus.AVAILABLE,
-        slotType: { $in: compatibleSlotTypes },
-      }).session(session);
+      const availableSlots = await ParkingSlot.find({ status: SlotStatus.AVAILABLE, slotType: { $in: compatibleSlotTypes } }).session(session);
 
       if (availableSlots.length > 0) {
-        // 2. Sort the results in our code to find the "nearest" one
         availableSlots.sort((a, b) => {
           const [floorA, numAStr] = a.slotNumber.split('-');
           const [floorB, numBStr] = b.slotNumber.split('-');
-
-          // compare by floor (e.g., 'B1' vs 'G')
           const floorComparison = floorA.localeCompare(floorB);
-          if (floorComparison !== 0) {
-            return floorComparison;
-          }
-
-          // If floors are the same, compare the numeric part of the slot
-          const numA = parseInt(numAStr, 10);
-          const numB = parseInt(numBStr, 10);
-          return numA - numB;
+          if (floorComparison !== 0) return floorComparison;
+          return parseInt(numAStr, 10) - parseInt(numBStr, 10);
         });
-
-        // 3. The first slot in the sorted array is our nearest available slot
         assignedSlot = availableSlots[0];
       } else {
         assignedSlot = null;
@@ -94,10 +79,14 @@ export async function POST(request: Request) {
       numberPlate, vehicleId: vehicle._id, slotId: assignedSlot._id, billingType, entryTime: new Date(),
     };
 
+    // Billing Logic
     if (billingType === BillingType.DAY_PASS) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       sessionData.dayPassDate = today;
+      // Create a temporary session object to pass to the calculator
+      const tempSession = { billingType, entryTime: new Date() } as IParkingSession;
+      sessionData.billingAmount = calculateBill(tempSession, vehicleType);
     }
 
     const newSession = new ParkingSession(sessionData);
