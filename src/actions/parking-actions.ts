@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { axiosInstance } from '@/lib/axios';
 import { queryKeys, queryConfig } from '@/lib/cache-config';
-import { VehicleType, BillingType } from '@/types/enums';
+import { VehicleType, BillingType, SessionStatus } from '@/types/enums';
 
 interface SlotCounts {
   total: number;
@@ -14,7 +14,7 @@ interface SlotCounts {
   maintenance: number;
 }
 
-interface ActiveSession {
+export interface ActiveSession {
   _id: string;
   numberPlate: string;
   entryTime: string;
@@ -24,6 +24,7 @@ interface ActiveSession {
   slotId: {
     slotNumber: string;
   };
+  status: SessionStatus;
 }
 
 interface DashboardData {
