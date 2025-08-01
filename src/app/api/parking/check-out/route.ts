@@ -8,7 +8,6 @@ import { ParkingSession, ParkingSlot } from '@/models';
 import { SessionStatus, SlotStatus } from '@/types/enums';
 
 const checkOutSchema = z.object({
-  // Can check-out by number plate or session ID
   numberPlate: z.string().optional(),
   sessionId: z.string().optional(),
 }).refine(data => data.numberPlate || data.sessionId, {
@@ -26,34 +25,48 @@ export async function PUT(request: Request) {
   try {
     await dbConnect();
     const body = await request.json();
-    
+
     // Validate input
     const validation = checkOutSchema.safeParse(body);
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: validation.error.flatten().fieldErrors }, { status: 400 });
+      await session.abortTransaction();
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: validation.error.flatten().fieldErrors 
+        },
+        { status: 400 }
+      );
     }
-    
+
     const { numberPlate, sessionId } = validation.data;
 
-    // 1. Find the active session
+    // Build query to find active session
     const query = {
       status: SessionStatus.ACTIVE,
       ...(numberPlate && { numberPlate: numberPlate.toUpperCase() }),
       ...(sessionId && { _id: sessionId }),
     };
-    
+
     const activeSession = await ParkingSession.findOne(query).session(session);
 
     if (!activeSession) {
-      throw new Error("No active session found for this vehicle.");
+      await session.abortTransaction();
+      return NextResponse.json(
+        {
+          success: false,
+          error: "No active session found for this vehicle or session ID.",
+        },
+        { status: 404 }
+      );
     }
 
-    // 2. Mark session as completed
+    // Mark session as completed
     activeSession.status = SessionStatus.COMPLETED;
     activeSession.exitTime = new Date();
     await activeSession.save({ session });
 
-    // 3. Free up the parking slot
+    // Free up the parking slot
     await ParkingSlot.findByIdAndUpdate(
       activeSession.slotId,
       { $set: { status: SlotStatus.AVAILABLE } },
@@ -62,12 +75,39 @@ export async function PUT(request: Request) {
 
     await session.commitTransaction();
 
-    return NextResponse.json({ success: true, data: activeSession }, { status: 200 });
+    return NextResponse.json(
+      { 
+        success: true, 
+        data: activeSession 
+      }, 
+      { status: 200 }
+    );
 
   } catch (error) {
     await session.abortTransaction();
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    return NextResponse.json({ success: false, error: errorMessage }, { status: 404 });
+
+    // Enhanced error handling
+    let errorMessage = 'An unexpected error occurred';
+    let statusCode = 500;
+
+    if (error instanceof Error) {
+      errorMessage = error.message;
+
+      if (error.message.includes("No active session")) {
+        statusCode = 404;
+      } else if (error.message.includes("Cast to ObjectId failed")) {
+        statusCode = 400;
+        errorMessage = "Invalid session ID format.";
+      }
+    }
+
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: errorMessage 
+      }, 
+      { status: statusCode }
+    );
   } finally {
     session.endSession();
   }

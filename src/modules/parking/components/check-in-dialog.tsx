@@ -11,9 +11,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { VehicleType, BillingType } from '@/types/enums';
 import { useCheckInMutation } from '@/actions/parking-actions';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, AlertCircle } from 'lucide-react';
 
 const formSchema = z.object({
   numberPlate: z.string().min(3, "Number plate must be at least 3 characters.").max(10),
@@ -27,6 +28,7 @@ const formSchema = z.object({
 
 export function CheckInDialog() {
   const [isOpen, setIsOpen] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
   const { mutate: checkIn, isPending } = useCheckInMutation();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -36,18 +38,62 @@ export function CheckInDialog() {
     },
   });
 
-  // The 'values' type is now correctly inferred by Zod and matches the mutation payload
+  // Clear server error when form values change
+  const clearServerError = () => {
+    if (serverError) {
+      setServerError(null);
+    }
+  };
+
   function onSubmit(values: z.infer<typeof formSchema>) {
+    setServerError(null); // Clear any previous server errors
+    
     checkIn(values, {
       onSuccess: () => {
         setIsOpen(false);
         form.reset();
+        setServerError(null);
+      },
+      onError: (error: any) => {
+        // Handle different types of errors from the API
+        if (error?.response?.data) {
+          const errorData = error.response.data;
+          
+          // Handle validation errors (field-specific errors)
+          if (errorData.error && typeof errorData.error === 'object' && !errorData.error.message) {
+            // This is a validation error object with field-specific errors
+            Object.entries(errorData.error).forEach(([field, messages]) => {
+              if (Array.isArray(messages) && messages.length > 0) {
+                form.setError(field as keyof typeof values, {
+                  message: messages[0] as string
+                });
+              }
+            });
+          } else {
+            // Handle general server errors (business logic errors)
+            const errorMessage = errorData.error?.message || errorData.error || 'An unexpected error occurred';
+            setServerError(errorMessage);
+          }
+        } else {
+          // Handle network errors or other unexpected errors
+          const errorMessage = error?.message || 'Network error. Please try again.';
+          setServerError(errorMessage);
+        }
       },
     });
   }
 
+  const handleDialogChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) {
+      // Reset form and clear errors when dialog closes
+      form.reset();
+      setServerError(null);
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleDialogChange}>
       <DialogTrigger asChild>
         <Button size="lg" className="flex items-center gap-2">
           <PlusCircle className="h-5 w-5" />
@@ -61,6 +107,15 @@ export function CheckInDialog() {
             Enter vehicle details to assign a parking slot.
           </DialogDescription>
         </DialogHeader>
+        
+        {/* Display server error if exists */}
+        {serverError && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{serverError}</AlertDescription>
+          </Alert>
+        )}
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
             <FormField
@@ -73,7 +128,10 @@ export function CheckInDialog() {
                     <Input 
                       placeholder="e.g., TN07CQ0000" 
                       {...field} 
-                      onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                      onChange={(e) => {
+                        field.onChange(e.target.value.toUpperCase());
+                        clearServerError();
+                      }}
                     />
                   </FormControl>
                   <FormMessage />
@@ -86,7 +144,13 @@ export function CheckInDialog() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Vehicle Type</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select 
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      clearServerError();
+                    }} 
+                    defaultValue={field.value}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select vehicle type" />
@@ -110,7 +174,10 @@ export function CheckInDialog() {
                   <FormLabel>Billing Type</FormLabel>
                   <FormControl>
                     <RadioGroup
-                      onValueChange={field.onChange}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        clearServerError();
+                      }}
                       defaultValue={field.value}
                       className="flex items-center space-x-6"
                     >

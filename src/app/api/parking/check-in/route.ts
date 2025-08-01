@@ -8,10 +8,14 @@ import mongoose from 'mongoose';
 
 // Zod schema for input validation
 const checkInSchema = z.object({
-  numberPlate: z.string().min(3, "Number plate is required.").toUpperCase(),
-  vehicleType: z.nativeEnum(VehicleType),
-  billingType: z.nativeEnum(BillingType),
-  slotId: z.string().optional(), 
+  numberPlate: z.string().min(3, "Number plate must be at least 3 characters.").max(10, "Number plate must be no more than 10 characters.").transform(val => val.toUpperCase()),
+  vehicleType: z.nativeEnum(VehicleType, {
+    message: "Please select a valid vehicle type."
+  }),
+  billingType: z.nativeEnum(BillingType, {
+    message: "Please select a valid billing type."
+  }),
+  slotId: z.string().optional(),
 });
 
 /**
@@ -26,29 +30,58 @@ export async function POST(request: Request) {
     await dbConnect();
     const body = await request.json();
     
+    // Validate input
     const validation = checkInSchema.safeParse(body);
     if (!validation.success) {
-      return NextResponse.json({ success: false, error: validation.error.flatten().fieldErrors }, { status: 400 });
+      await session.abortTransaction();
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: validation.error.flatten().fieldErrors 
+        }, 
+        { status: 400 }
+      );
     }
-    
+
     const { numberPlate, vehicleType, billingType, slotId } = validation.data;
 
-    const existingActiveSession = await ParkingSession.findOne({ numberPlate, status: SessionStatus.ACTIVE }).session(session);
+    // Check for existing active session
+    const existingActiveSession = await ParkingSession.findOne({ 
+      numberPlate, 
+      status: SessionStatus.ACTIVE 
+    }).session(session);
+
     if (existingActiveSession) {
-      throw new Error(`Vehicle ${numberPlate} already has an active session.`);
+      await session.abortTransaction();
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: `Vehicle ${numberPlate} already has an active session.` 
+        }, 
+        { status: 409 }
+      );
     }
 
+    // Find or create vehicle
     let vehicle = await Vehicle.findOne({ numberPlate }).session(session);
     if (!vehicle) {
       vehicle = new Vehicle({ numberPlate, vehicleType });
       await vehicle.save({ session });
     }
 
+    // Find available slot
     let assignedSlot;
     if (slotId) {
       assignedSlot = await ParkingSlot.findById(slotId).session(session);
       if (!assignedSlot || assignedSlot.status !== SlotStatus.AVAILABLE) {
-        throw new Error("Manually selected slot is not available.");
+        await session.abortTransaction();
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: "Manually selected slot is not available." 
+          }, 
+          { status: 409 }
+        );
       }
     } else {
       const compatibleSlotTypes = getCompatibleSlotTypes(vehicleType);
@@ -57,12 +90,19 @@ export async function POST(request: Request) {
         slotType: { $in: compatibleSlotTypes },
       }).sort({ floor: 1, slotNumber: 1 }).session(session);
     }
-    
+
     if (!assignedSlot) {
-      throw new Error("No available parking slots for this vehicle type.");
+      await session.abortTransaction();
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "No available parking slots for this vehicle type." 
+        }, 
+        { status: 409 }
+      );
     }
 
-    // --- FIX: Conditionally add dayPassDate ---
+    // Prepare session data
     const sessionData: any = {
       numberPlate,
       vehicleId: vehicle._id,
@@ -73,26 +113,54 @@ export async function POST(request: Request) {
 
     if (billingType === BillingType.DAY_PASS) {
       const today = new Date();
-      today.setHours(0, 0, 0, 0); // Set to the beginning of the day
+      today.setHours(0, 0, 0, 0);
       sessionData.dayPassDate = today;
     }
-    // --- End of FIX ---
 
-    // Create the new parking session with the complete data
+    // Create parking session
     const newSession = new ParkingSession(sessionData);
     await newSession.save({ session });
 
+    // Update slot status
     assignedSlot.status = SlotStatus.OCCUPIED;
     await assignedSlot.save({ session });
 
     await session.commitTransaction();
 
-    return NextResponse.json({ success: true, data: { session: newSession, slot: assignedSlot.slotNumber } }, { status: 201 });
+    return NextResponse.json(
+      { 
+        success: true, 
+        data: { 
+          session: newSession, 
+          slot: assignedSlot.slotNumber 
+        } 
+      }, 
+      { status: 201 }
+    );
 
   } catch (error) {
     await session.abortTransaction();
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    return NextResponse.json({ success: false, error: errorMessage }, { status: 409 });
+    
+    // Handle different types of errors
+    let errorMessage = 'An unexpected error occurred';
+    let statusCode = 500;
+
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      // You can add more specific error handling here based on error types
+      if (error.message.includes('duplicate key')) {
+        statusCode = 409;
+        errorMessage = 'This record already exists';
+      }
+    }
+
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: errorMessage 
+      }, 
+      { status: statusCode }
+    );
   } finally {
     session.endSession();
   }
