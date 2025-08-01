@@ -50,7 +50,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
       );
     }
 
-    let updatePayload: any = {
+    const updatePayload: any = {
         status: status,
     };
 
