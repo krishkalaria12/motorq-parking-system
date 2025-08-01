@@ -1,5 +1,3 @@
-'use server';
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { queryKeys, queryConfig } from '@/lib/cache-config';

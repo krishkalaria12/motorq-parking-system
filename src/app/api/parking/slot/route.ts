@@ -6,14 +6,12 @@ import { ParkingSlot } from '@/models';
 import { SlotType } from '@/types/enums';
 import { z } from 'zod';
 
-// Zod schema for a single slot object
 const slotSchema = z.object({
   slotNumber: z.string().regex(/^[A-Z0-9]+[-][A-Z0-9]+$/, "Slot number must be in FLOOR-NUMBER format (e.g., B1-12)"),
   floor: z.string().min(1, "Floor is required."),
   slotType: z.nativeEnum(SlotType),
 });
 
-// Zod schema for an array of slots (for bulk creation)
 const createSlotsSchema = z.array(slotSchema).min(1, "At least one slot must be provided.");
 
 export async function POST(request: Request) {

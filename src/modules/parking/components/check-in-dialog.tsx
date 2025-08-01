@@ -1,104 +1,102 @@
 // components/parking/CheckInDialog.tsx
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { useState, useMemo } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { VehicleType, BillingType } from '@/types/enums';
-import { useCheckInMutation } from '@/actions/parking-actions';
-import { PlusCircle, AlertCircle } from 'lucide-react';
+import { Switch } from "@/components/ui/switch";
+import { VehicleType, BillingType, SlotStatus } from "@/types/enums";
+import { useCheckInMutation } from "@/actions/parking-actions";
+import { useAllSlotsQuery } from "@/actions/slot-actions";
+import { PlusCircle } from "lucide-react";
 
-const formSchema = z.object({
-  numberPlate: z.string().min(3, "Number plate must be at least 3 characters.").max(10),
-  vehicleType: z.nativeEnum(VehicleType, {
-    message: "Please select a vehicle type.",
-  }),
-  billingType: z.nativeEnum(BillingType, {
-    message: "Please select a billing type.",
-  }),
-});
+// --- Corrected Zod Schema ---
+const formSchema = z
+  .object({
+    numberPlate: z.string().min(3, "Number plate is required.").max(10),
+    vehicleType: z.nativeEnum(VehicleType).refine(val => !!val, {
+      message: 'Please select a vehicle type.',
+    }),
+    billingType: z.nativeEnum(BillingType).refine(val => !!val, {
+      message: 'Please select a billing type.',
+    }),
+    isManualAssignment: z.boolean(),
+    slotId: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      return (
+        !data.isManualAssignment || (data.isManualAssignment && !!data.slotId)
+      );
+    },
+    {
+      message: "Please select a slot for manual assignment.",
+      path: ["slotId"],
+    }
+  );
 
 export function CheckInDialog() {
   const [isOpen, setIsOpen] = useState(false);
-  const [serverError, setServerError] = useState<string | null>(null);
   const { mutate: checkIn, isPending } = useCheckInMutation();
+  const { data: allSlots, isLoading: isLoadingSlots } = useAllSlotsQuery();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       numberPlate: "",
+      isManualAssignment: false,
     },
   });
 
-  // Clear server error when form values change
-  const clearServerError = () => {
-    if (serverError) {
-      setServerError(null);
-    }
-  };
+  const isManual = form.watch("isManualAssignment");
+
+  const availableSlots = useMemo(() => {
+    if (!allSlots) return [];
+    return allSlots.filter((slot) => slot.status === SlotStatus.AVAILABLE);
+  }, [allSlots]);
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    setServerError(null); // Clear any previous server errors
-    
     checkIn(values, {
       onSuccess: () => {
         setIsOpen(false);
         form.reset();
-        setServerError(null);
-      },
-      onError: (error: any) => {
-        // Handle different types of errors from the API
-        if (error?.response?.data) {
-          const errorData = error.response.data;
-          
-          // Handle validation errors (field-specific errors)
-          if (errorData.error && typeof errorData.error === 'object' && !errorData.error.message) {
-            // This is a validation error object with field-specific errors
-            Object.entries(errorData.error).forEach(([field, messages]) => {
-              if (Array.isArray(messages) && messages.length > 0) {
-                form.setError(field as keyof typeof values, {
-                  message: messages[0] as string
-                });
-              }
-            });
-          } else {
-            // Handle general server errors (business logic errors)
-            const errorMessage = errorData.error?.message || errorData.error || 'An unexpected error occurred';
-            setServerError(errorMessage);
-          }
-        } else {
-          // Handle network errors or other unexpected errors
-          const errorMessage = error?.message || 'Network error. Please try again.';
-          setServerError(errorMessage);
-        }
       },
     });
   }
 
-  const handleDialogChange = (open: boolean) => {
-    setIsOpen(open);
-    if (!open) {
-      // Reset form and clear errors when dialog closes
-      form.reset();
-      setServerError(null);
-    }
-  };
-
   return (
-    <Dialog open={isOpen} onOpenChange={handleDialogChange}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button size="lg" className="flex items-center gap-2">
-          <PlusCircle className="h-5 w-5" />
-          New Vehicle Check-In
+          <PlusCircle className="h-5 w-5" /> New Vehicle Check-In
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
@@ -108,17 +106,11 @@ export function CheckInDialog() {
             Enter vehicle details to assign a parking slot.
           </DialogDescription>
         </DialogHeader>
-        
-        {/* Display server error if exists */}
-        {serverError && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{serverError}</AlertDescription>
-          </Alert>
-        )}
-
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-4 py-4"
+          >
             <FormField
               control={form.control}
               name="numberPlate"
@@ -126,13 +118,12 @@ export function CheckInDialog() {
                 <FormItem>
                   <FormLabel>Number Plate</FormLabel>
                   <FormControl>
-                    <Input 
-                      placeholder="e.g., TN07CQ0000" 
-                      {...field} 
-                      onChange={(e) => {
-                        field.onChange(e.target.value.toUpperCase());
-                        clearServerError();
-                      }}
+                    <Input
+                      placeholder="e.g., TN07CQ0000"
+                      {...field}
+                      onChange={(e) =>
+                        field.onChange(e.target.value.toUpperCase())
+                      }
                     />
                   </FormControl>
                   <FormMessage />
@@ -145,11 +136,8 @@ export function CheckInDialog() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Vehicle Type</FormLabel>
-                  <Select 
-                    onValueChange={(value) => {
-                      field.onChange(value);
-                      clearServerError();
-                    }} 
+                  <Select
+                    onValueChange={field.onChange}
                     defaultValue={field.value}
                   >
                     <FormControl>
@@ -158,8 +146,10 @@ export function CheckInDialog() {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {Object.values(VehicleType).map(type => (
-                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                      {Object.values(VehicleType).map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -175,10 +165,7 @@ export function CheckInDialog() {
                   <FormLabel>Billing Type</FormLabel>
                   <FormControl>
                     <RadioGroup
-                      onValueChange={(value) => {
-                        field.onChange(value);
-                        clearServerError();
-                      }}
+                      onValueChange={field.onChange}
                       defaultValue={field.value}
                       className="flex items-center space-x-6"
                     >
@@ -200,9 +187,71 @@ export function CheckInDialog() {
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="isManualAssignment"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                  <div className="space-y-0.5">
+                    <FormLabel>Manual Slot Assignment</FormLabel>
+                    <FormMessage />
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {isManual && (
+              <FormField
+                control={form.control}
+                name="slotId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Select Available Slot</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger disabled={isLoadingSlots}>
+                          <SelectValue
+                            placeholder={
+                              isLoadingSlots
+                                ? "Loading slots..."
+                                : "Choose a slot"
+                            }
+                          />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {availableSlots.length > 0 ? (
+                          availableSlots.map((slot) => (
+                            <SelectItem key={slot._id} value={slot._id}>
+                              {slot.slotNumber} ({slot.slotType})
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-4 text-center text-sm text-muted-foreground">
+                            No slots available.
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <DialogFooter className="pt-4">
               <Button type="submit" disabled={isPending} className="w-full">
-                {isPending ? "Assigning Slot..." : "Assign Slot & Check-In"}
+                {isPending ? "Assigning..." : "Assign Slot & Check-In"}
               </Button>
             </DialogFooter>
           </form>
