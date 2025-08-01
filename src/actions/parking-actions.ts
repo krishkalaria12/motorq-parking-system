@@ -77,6 +77,9 @@ export function useCheckInMutation() {
     onSuccess: (data) => {
       toast.success(`Vehicle checked in! Assigned to slot ${data.slot}.`);
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard });
+      queryClient.invalidateQueries({ queryKey: queryKeys.billingSummary("today") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.billingSummary("week") });
+      queryClient.invalidateQueries({ queryKey: queryKeys.billingSummary("month") })
     },
   });
 }
