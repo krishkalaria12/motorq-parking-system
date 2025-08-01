@@ -8,8 +8,11 @@ import { CheckInDialog } from '@/modules/parking/components/check-in-dialog';
 import { DashboardFilters } from '@/modules/parking/components/dashboard-filter';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ParkingSquare, CheckCircle, XCircle, Wrench, AlertTriangle } from 'lucide-react';
 import { VehicleType } from '@/types/enums';
+import { SlotsManagement } from '../components/slot-management';
+import { AddSlotsDialog } from '../components/add-slots-dialog';
 
 export function DashboardPage() {
   const [filters, setFilters] = useState<{ vehicleType?: VehicleType | 'ALL'; numberPlate?: string }>({
@@ -50,7 +53,10 @@ export function DashboardPage() {
             <h1 className="text-3xl font-bold tracking-tight text-gray-800">Parking Dashboard</h1>
             <p className="text-muted-foreground">Real-time overview of parking operations.</p>
           </div>
-          <CheckInDialog />
+          <div className="flex items-center gap-2">
+            <AddSlotsDialog />
+            <CheckInDialog />
+          </div>
         </header>
 
         {/* Stats Grid */}
@@ -67,11 +73,6 @@ export function DashboardPage() {
           )}
         </div>
 
-        {/* Filter and Search Section */}
-        <div className="mb-8">
-          <DashboardFilters onFilterChange={handleFilterChange} />
-        </div>
-
         {isError && (
           <Alert variant="destructive" className="mb-8">
             <AlertTriangle className="h-4 w-4" />
@@ -80,12 +81,28 @@ export function DashboardPage() {
           </Alert>
         )}
 
-        {/* 3. Render the ActiveSessionsTable with the filtered data */}
-        {isLoading ? (
-          <Skeleton className="h-[400px] w-full" />
-        ) : (
-          <ActiveSessionsTable sessions={filteredSessions} />
-        )}
+        {/* Tabbed Interface */}
+        <Tabs defaultValue="sessions" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 md:w-[400px]">
+            <TabsTrigger value="sessions">Active Sessions</TabsTrigger>
+            <TabsTrigger value="slots">Slot Management</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="sessions" className="mt-4">
+            <div className="mb-8">
+              <DashboardFilters onFilterChange={handleFilterChange} />
+            </div>
+            {isLoading ? (
+              <Skeleton className="h-[400px] w-full" />
+            ) : (
+              <ActiveSessionsTable sessions={filteredSessions} />
+            )}
+          </TabsContent>
+
+          <TabsContent value="slots" className="mt-4">
+            <SlotsManagement />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
