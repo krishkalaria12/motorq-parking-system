@@ -1,4 +1,5 @@
 // app/api/parking/check-in/route.ts
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import dbConnect from '@/db';
 import { Vehicle, ParkingSession, ParkingSlot } from '@/models';

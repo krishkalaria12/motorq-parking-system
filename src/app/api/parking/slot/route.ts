@@ -1,5 +1,5 @@
 // app/api/parking/slots/route.ts
-
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import dbConnect from '@/db';
 import { ParkingSlot } from '@/models';
@@ -16,16 +16,11 @@ const slotSchema = z.object({
 // Zod schema for an array of slots (for bulk creation)
 const createSlotsSchema = z.array(slotSchema).min(1, "At least one slot must be provided.");
 
-/**
- * @description Create one or more parking slots in bulk.
- * This is used for initially setting up the parking lot layout.
- */
 export async function POST(request: Request) {
   try {
     await dbConnect();
     const body = await request.json();
 
-    // Validate the incoming array of slots
     const validation = createSlotsSchema.safeParse(body);
     if (!validation.success) {
       return NextResponse.json(
@@ -36,7 +31,6 @@ export async function POST(request: Request) {
 
     const slotsToCreate = validation.data;
 
-    // Bulk insert, even if some entries fail
     const result = await ParkingSlot.insertMany(slotsToCreate, { ordered: false });
 
     return NextResponse.json(
@@ -49,7 +43,6 @@ export async function POST(request: Request) {
     );
 
   } catch (error: unknown) {
-    // Handle duplicate key errors for slotNumber
     if (typeof error === 'object' && error !== null && 'code' in error && (error as any).code === 11000) {
       return NextResponse.json(
         {

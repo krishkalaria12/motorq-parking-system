@@ -14,10 +14,6 @@ const checkOutSchema = z.object({
   message: "Either numberPlate or sessionId must be provided.",
 });
 
-/**
- * @description Handle vehicle check-out.
- * Completes the session and frees the parking slot.
- */
 export async function PUT(request: Request) {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -41,7 +37,6 @@ export async function PUT(request: Request) {
 
     const { numberPlate, sessionId } = validation.data;
 
-    // Build query to find active session
     const query = {
       status: SessionStatus.ACTIVE,
       ...(numberPlate && { numberPlate: numberPlate.toUpperCase() }),
@@ -61,7 +56,6 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Mark session as completed
     activeSession.status = SessionStatus.COMPLETED;
     activeSession.exitTime = new Date();
     await activeSession.save({ session });
@@ -86,7 +80,6 @@ export async function PUT(request: Request) {
   } catch (error) {
     await session.abortTransaction();
 
-    // Enhanced error handling
     let errorMessage = 'An unexpected error occurred';
     let statusCode = 500;
 
