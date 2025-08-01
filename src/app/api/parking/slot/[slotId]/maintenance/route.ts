@@ -19,15 +19,15 @@ const maintenanceSchema = z.object({
 
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     slotId: string;
-  };
+  }>;
 }
 
 export async function PUT(request: Request, { params }: RouteContext) {
   try {
     await dbConnect();
-    const { slotId } = params;
+    const { slotId } = await params;
     const body = await request.json();
 
     const validation = maintenanceSchema.safeParse(body);
